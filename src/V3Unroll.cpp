@@ -378,6 +378,12 @@ class UnrollVisitor final : public VNVisitor {
     }
 
     void visit(AstWhile* nodep) override {
+        if (v3Global.opt.timing().isSetTrue()
+            && (nodep->exists([](AstNode* nodep) { return nodep->isTimingControl(); }))) {
+            // Loops with timing control statements cannot be unrolled
+            return;
+        }
+
         iterateChildren(nodep);
         if (m_varModeCheck || m_varModeReplace) {
         } else {
