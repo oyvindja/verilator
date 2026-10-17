@@ -5813,7 +5813,8 @@ class WidthVisitor final : public VNVisitor {
 
     void patternArray(AstPattern* nodep, AstNodeArrayDType* arrayDtp, AstPatMember* defaultp) {
         const VNumRange range = arrayDtp->declRange();
-        PatVecMap patmap = patVectorMap(nodep, range);
+        const bool arrayOfArrays = VN_IS(arrayDtp->subDTypep()->skipRefp(), UnpackArrayDType);
+        PatVecMap patmap = patVectorMap(nodep, range, arrayOfArrays);
         UINFO(9, "ent " << range.left() << " to " << range.right());
         AstNode* newp = nullptr;
         bool allConstant = true;
@@ -5855,7 +5856,11 @@ class WidthVisitor final : public VNVisitor {
                     const AstInitArray* subInitp = nullptr;
                     int flattenLo = 0;
                     int flattenElements = 0;
-                    if (const AstNodeVarRef* vrp = VN_CAST(valuep, NodeVarRef)) {
+                    // Only flatten into arrays of scalars; for an array of arrays the
+                    // member is a whole element and is stored as-is
+                    if (arrayOfArrays) {
+                        // No flattening
+                    } else if (const AstNodeVarRef* vrp = VN_CAST(valuep, NodeVarRef)) {
                         subInitp = VN_CAST(vrp->varp()->valuep(), InitArray);
                         if (subInitp) {
                             if (const AstNodeArrayDType* adtp
@@ -6008,7 +6013,7 @@ class WidthVisitor final : public VNVisitor {
     void patternBasic(AstPattern* nodep, AstNodeDType* vdtypep, AstPatMember* defaultp) {
         const AstBasicDType* bdtypep = VN_AS(vdtypep, BasicDType);
         const VNumRange range = bdtypep->declRange();
-        PatVecMap patmap = patVectorMap(nodep, range);
+        PatVecMap patmap = patVectorMap(nodep, range, false);
         UINFO(9, "ent " << range.hi() << " to " << range.lo());
         AstNodeExpr* newp = nullptr;
         for (int ent = range.hi(); ent >= range.lo(); --ent) {
@@ -9993,7 +9998,7 @@ class WidthVisitor final : public VNVisitor {
         return testp;
     }
 
-    PatVecMap patVectorMap(AstPattern* nodep, const VNumRange& range) {
+    PatVecMap patVectorMap(AstPattern* nodep, const VNumRange& range, bool noFlatten) {
         PatVecMap patmap;
         int element = range.left();
         for (AstPatMember* patp = VN_AS(nodep->itemsp(), PatMember); patp;
@@ -10019,7 +10024,7 @@ class WidthVisitor final : public VNVisitor {
             // subsequent members are mapped correctly.  Width-resolve the
             // value expression so its dtype is set
             int elementAdvance = 1;
-            if (!patp->keyp()
+            if (!noFlatten && !patp->keyp()
                 && (VN_IS(patp->lhssp(), NodeVarRef) || VN_IS(patp->lhssp(), SelExtract))) {
                 userIterateAndNext(patp->lhssp(), WidthVP{CONTEXT_DET, PRELIM}.p());
                 AstNodeExpr* const exprp = patp->lhssp();
