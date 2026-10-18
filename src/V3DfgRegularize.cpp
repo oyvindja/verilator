@@ -181,6 +181,12 @@ class DfgRegularize final {
             if (srcp->is<DfgVertexSplice>()) return;
             if (srcp->is<DfgUnitArray>()) return;
 
+            // Do not eliminate variables whose driver also feeds other sinks (e.g. after another
+            // variable driven by the same vertex was eliminated and its readers were relinked
+            // to the driver): inlining would duplicate the driver, and needsTemporary requires
+            // the variable to be the driver's only sink.
+            if (!srcp->is<DfgVertexVar>() && !srcp->isCheaperThanLoad() && srcp->singleSink() != varp) return;
+
             // Do not eliminate variables that are driven from a vertex that needs a temporary
             if (!srcp->is<DfgVertexVar>() && needsTemporary(*srcp, *varp)) return;
 
